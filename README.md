@@ -11,4 +11,4 @@ A Django backend for EasyGov, summarizing government documents for UN SDGs 5 and
 7. Start server: `python manage.py runserver`
 
 ## API Endpoints
-- GET `/api/health/`: Health check
+- GET `/api/health/`: Health check# EasyGov
