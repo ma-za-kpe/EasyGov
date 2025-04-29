@@ -76,28 +76,30 @@ TEMPLATES = [
 WSGI_APPLICATION = 'app.wsgi.application'
 
 
-# Database
-# https://docs.djangoproject.com/en/5.2/ref/settings/#databases
-
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql' if not DEBUG else 'django.db.backends.sqlite3',
-        'NAME': os.getenv('DB_NAME', 'easygov') if not DEBUG else os.path.join(BASE_DIR, 'db.sqlite3'),
-        'USER': os.getenv('DB_USER', ''),
-        'PASSWORD': os.getenv('DB_PASSWORD', ''),
-        'HOST': os.getenv('DB_HOST', ''),
-        'PORT': os.getenv('DB_PORT', '5432'),
-    }
-}
-
-# Use DATABASE_URL environment variable if available (Render provides this)
+# Database configuration
 DATABASE_URL = os.environ.get('DATABASE_URL')
+
 if DATABASE_URL:
-    DATABASES['default'] = dj_database_url.config(
-        default=DATABASE_URL,
-        conn_max_age=600,
-        ssl_require=True
-    )
+    # If DATABASE_URL is available (Render provides this)
+    DATABASES = {
+        'default': dj_database_url.config(
+            default=DATABASE_URL,
+            conn_max_age=600,
+            ssl_require=True
+        )
+    }
+else:
+    # Only use this if DATABASE_URL is not available
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql' if not DEBUG else 'django.db.backends.sqlite3',
+            'NAME': os.getenv('DB_NAME', 'easygov') if not DEBUG else os.path.join(BASE_DIR, 'db.sqlite3'),
+            'USER': os.getenv('DB_USER', ''),
+            'PASSWORD': os.getenv('DB_PASSWORD', ''),
+            'HOST': os.getenv('DB_HOST', ''),
+            'PORT': os.getenv('DB_PORT', '5432'),
+        }
+    }
 
 
 # Password validation
