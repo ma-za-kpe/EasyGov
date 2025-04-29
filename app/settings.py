@@ -31,9 +31,7 @@ DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
 ALLOWED_HOSTS = ['easygov.onrender.com', 'localhost']
 
-CSRF_TRUSTED_ORIGINS = [
-    'https://easygov.onrender.com',
-]
+CSRF_TRUSTED_ORIGINS = ['https://easygov.onrender.com', 'http://localhost:3000', 'http://127.0.0.1:3000']
 
 
 # Application definition
@@ -45,13 +43,14 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    
-    'rest_framework',  # Django REST Framework for APIs
-    'core',  # Custom app for EasyGov logic
+    'rest_framework',
+    'corsheaders',
+    'core',
     'regions'
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -59,6 +58,97 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+]
+
+# CORS settings
+# For development, you can use:
+CORS_ALLOW_ALL_ORIGINS = True
+
+# For production, specify allowed origins:
+# CORS_ALLOWED_ORIGINS = [
+#     "http://localhost:3000",
+#     "http://127.0.0.1:3000",
+#     # Add your production domains here
+# ]
+
+# Additional settings
+CORS_ALLOW_CREDENTIALS = True
+
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'loggers': {
+        'corsheaders': {
+            'handlers': ['console'],
+            'level': 'DEBUG',
+        },
+    },
+}
+
+
+# # CORS settings
+# # During development, allow all origins and credentials
+# if DEBUG:
+#     CORS_ALLOW_ALL_ORIGINS = True
+#     CORS_ALLOW_CREDENTIALS = True
+#     CORS_ALLOWED_ORIGINS = [
+#     "http://localhost:3000",
+#     "http://127.0.0.1:3000",
+#     ]
+# else:
+#     # For production, specify allowed origins
+#     CORS_ALLOWED_ORIGINS = [
+#         "https://your-production-frontend-domain.com",
+#         "https://www.your-production-frontend-domain.com",
+#     ]
+#     CORS_ALLOW_CREDENTIALS = True
+
+# Additional CORS settings
+CORS_ALLOW_METHODS = [
+    "DELETE",
+    "GET",
+    "OPTIONS",
+    "PATCH",
+    "POST",
+    "PUT",
+]
+
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "content-type",
+    "dnt",
+    "origin",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
 ]
 
 ROOT_URLCONF = 'app.urls'
