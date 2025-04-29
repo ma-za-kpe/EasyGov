@@ -29,7 +29,7 @@ SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-default-key')
 
 DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = ['easygov.onrender.com']
+ALLOWED_HOSTS = ['easygov.onrender.com', 'localhost']
 
 CSRF_TRUSTED_ORIGINS = [
     'https://easygov.onrender.com',
@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     
     'rest_framework',  # Django REST Framework for APIs
     'core',  # Custom app for EasyGov logic
+    'regions'
 ]
 
 MIDDLEWARE = [
