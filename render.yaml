@@ -16,6 +16,6 @@ services:
       - key: PYTHON_VERSION
         value: 3.8.10
 databases:
-  - name: easygov-db
-    databaseName: easygov
-    user: admin
+  - name: dpg-d00nr6c9c44c73chnrp0-a
+    databaseName: kusaidia_db
+    user: kusaidia_db_user
