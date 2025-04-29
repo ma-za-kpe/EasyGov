@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: easygov-backend
+    env: python
+    plan: free
+    buildCommand: |
+      pip install -r requirements.txt
+      python manage.py collectstatic --noinput
+      python manage.py migrate
+    startCommand: gunicorn app.wsgi:application
+    envVars:
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: False
+      - key: PYTHON_VERSION
+        value: 3.8.10
+databases:
+  - name: easygov-db
+    databaseName: easygov
+    user: admin
