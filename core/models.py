@@ -102,7 +102,7 @@ class Summary(models.Model):
     text = models.TextField()
     original_text = models.TextField(blank=True, null=True)
     explanation = models.TextField(blank=True, null=True)
-    language = models.CharField(max_length=10, choices=[('en', 'English'), ('sw', 'Swahili')])
+    language = models.CharField(max_length=10, choices=[('en', 'English')], default='en')
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
