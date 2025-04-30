@@ -1,5 +1,7 @@
 # core/admin.py
 from django.contrib import admin
+from django.contrib.admin.actions import delete_selected
+from django.contrib import messages
 from .models import Document, Summary, FactCheck
 
 class SummaryInline(admin.TabularInline):
@@ -20,7 +22,7 @@ class FactCheckInline(admin.TabularInline):
 
 @admin.register(Document)
 class DocumentAdmin(admin.ModelAdmin):
-    list_display = ['title', 'region', 'uploaded_at', 'source_url', 'is_verified', 'summarization_processed']
+    list_display = ['title', 'region', 'is_verified', 'summarization_processed']
     list_filter = ['region', 'is_verified', 'summarization_processed']
     search_fields = ['title']
     readonly_fields = ['uploaded_at', 'summarization_processed']
@@ -34,15 +36,27 @@ class DocumentAdmin(admin.ModelAdmin):
             'fields': ('source_url', 'is_verified')
         }),
         ('Processing Status', {
-            'fields': ('uploaded_at', 'summarization_processed'),
+            'fields': ('uploaded_at', 'summarization_processed', 'should_summarize'),
             'classes': ('collapse',)
         })
     )
-    actions = ['mark_as_verified', 'mark_as_unverified', 'trigger_resummary']
+    
+    # Include default delete action and custom actions
+    actions = [delete_selected, 'mark_as_verified', 'mark_as_unverified', 'trigger_summarization']
+
+    def save_model(self, request, obj, form, change):
+        """Override save_model to handle summarization queuing"""
+        # For new documents, we can let it be processed normally
+        # Celery will handle the processing in the background
+        super().save_model(request, obj, form, change)
+        
+        # Show a helpful message
+        if not change:  # New document
+            messages.info(request, "Document saved. Summarization will be processed in the background.")
 
     def mark_as_verified(self, request, queryset):
+        """Mark documents as verified"""
         updated = queryset.update(is_verified=True)
-        # Also update all related fact checks
         for doc in queryset:
             for summary in doc.summaries.all():
                 FactCheck.objects.filter(summary=summary).update(is_verified=True)
@@ -50,21 +64,27 @@ class DocumentAdmin(admin.ModelAdmin):
     mark_as_verified.short_description = "Mark selected documents as verified"
 
     def mark_as_unverified(self, request, queryset):
+        """Mark documents as unverified"""
         updated = queryset.update(is_verified=False)
-        # Also update all related fact checks
         for doc in queryset:
             for summary in doc.summaries.all():
                 FactCheck.objects.filter(summary=summary).update(is_verified=False)
         self.message_user(request, f"{updated} documents marked as unverified.")
     mark_as_unverified.short_description = "Mark selected documents as unverified"
     
-    def trigger_resummary(self, request, queryset):
+    def trigger_summarization(self, request, queryset):
+        """Manually trigger summarization for selected documents"""
+        # Import Celery task
+        from .tasks import process_document_summaries
+        
+        count = 0
         for doc in queryset:
-            # Set flag to false to trigger re-summarization on save
-            doc.summarization_processed = False
-            doc.save()
-        self.message_user(request, f"{queryset.count()} documents queued for re-summarization.")
-    trigger_resummary.short_description = "Re-generate summaries for selected documents"
+            # Queue the task for processing
+            process_document_summaries.delay(doc.id)
+            count += 1
+            
+        self.message_user(request, f"{count} documents queued for re-summarization. Processing will happen in the background.")
+    trigger_summarization.short_description = "Re-generate summaries for selected documents"
 
 @admin.register(Summary)
 class SummaryAdmin(admin.ModelAdmin):

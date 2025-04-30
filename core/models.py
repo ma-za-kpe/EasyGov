@@ -1,4 +1,4 @@
-# core/models.py - Updated with fallback explanations
+# core/models.py - Updated with Celery integration
 from django.db import models
 from django.db.models.signals import post_save
 from django.dispatch import receiver
@@ -8,13 +8,26 @@ import logging
 logger = logging.getLogger(__name__)
 
 class Document(models.Model):
+    """
+    Document model representing a government document (PDF) that needs to be summarized.
+    
+    The document processing pipeline:
+    1. Admin adds a document via the admin interface 
+    2. The post_save signal triggers a Celery task
+    3. Summaries are generated asynchronously in different languages
+    4. FactChecks are added to verify the document's authenticity
+    """
     title = models.CharField(max_length=255)
     pdf_url = models.URLField(max_length=500)
     source_url = models.URLField(max_length=500, blank=True, default='')
     is_verified = models.BooleanField(default=False)
     region = models.ForeignKey(Region, on_delete=models.CASCADE, related_name='documents')
     uploaded_at = models.DateTimeField(auto_now_add=True)
+    # Flag indicating if summarization has been processed (prevents re-processing)
     summarization_processed = models.BooleanField(default=False)
+    
+    # Added to defer summarization
+    should_summarize = models.BooleanField(default=True, help_text="Uncheck to add document without auto-summarization")
 
     def __str__(self):
         return self.title
@@ -66,7 +79,25 @@ class Document(models.Model):
         except Exception as e:
             logger.error(f"Error syncing verification status for document {self.id}: {str(e)}")
 
+    def trigger_summarization(self):
+        """
+        Manually trigger the summarization process via Celery task.
+        """
+        from core.tasks import process_document_summaries
+        process_document_summaries.delay(self.id)
+        logger.info(f"Manually triggered summarization for document {self.id}")
+
+
 class Summary(models.Model):
+    """
+    Summary model representing a simplified version of a document.
+    Each document can have multiple summaries in different languages.
+    
+    Includes:
+    - Main summary text
+    - Original text (optional excerpt from the document)
+    - Explanation (how this affects women and marginalized groups)
+    """
     document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name='summaries')
     text = models.TextField()
     original_text = models.TextField(blank=True, null=True)
@@ -109,7 +140,14 @@ class Summary(models.Model):
     class Meta:
         unique_together = ('document', 'language')
 
+
 class FactCheck(models.Model):
+    """
+    FactCheck model representing verification information for a summary.
+    
+    Used to track whether a summary has been verified for accuracy and
+    to provide source URLs for verification.
+    """
     summary = models.ForeignKey(Summary, on_delete=models.CASCADE, related_name='fact_checks')
     source_url = models.URLField(max_length=500)
     is_verified = models.BooleanField(default=False)
@@ -118,77 +156,28 @@ class FactCheck(models.Model):
     def __str__(self):
         return f"FactCheck for {self.summary}"
 
-# Signal to auto-generate summaries when a document is created
+
+# Signal to queue Celery task when a document is created
 @receiver(post_save, sender=Document)
-def create_summaries(sender, instance, created, **kwargs):
-    """When a document is created, automatically generate summaries in all supported languages."""
+def queue_document_processing(sender, instance, created, **kwargs):
+    """
+    When a document is created, queue a Celery task to generate summaries asynchronously.
+    This prevents the admin interface from hanging during document creation.
+    """
+    # Skip if document should not be summarized
+    if hasattr(instance, 'should_summarize') and not instance.should_summarize:
+        logger.info(f"Skipping summarization for document {instance.id} as requested")
+        return
+    
+    # Skip if this is marked to skip task queuing (to avoid infinite loops)
+    if kwargs.get('skip_task', False):
+        return
+        
+    # Only process if document is new or needs reprocessing
     if created or not instance.summarization_processed:
-        try:
-            # Avoid circular import
-            from core.summarizer import Summarizer
-            
-            logger.info(f"Auto-generating summaries for document: {instance.title}")
-            summarizer = Summarizer()
-            
-            # Generate summaries in supported languages
-            languages = ['en', 'sw']
-            
-            for lang in languages:
-                # Check if summary already exists
-                if not Summary.objects.filter(document=instance, language=lang).exists():
-                    try:
-                        # Generate summary with retries and timeouts
-                        max_retries = 3
-                        for attempt in range(max_retries):
-                            try:
-                                summary_text = summarizer.summarize_document(instance.pdf_url, language=lang)
-                                break
-                            except Exception as e:
-                                if attempt == max_retries - 1:
-                                    # Last attempt failed, use default text
-                                    logger.error(f"All attempts to summarize document {instance.id} failed: {str(e)}")
-                                    summary_text = f"This document contains budget information for {instance.title}."
-                                else:
-                                    # Retry
-                                    logger.warning(f"Attempt {attempt+1} to summarize document {instance.id} failed: {str(e)}, retrying...")
-                                    continue
-                        
-                        # Create summary with the text (might be default if all attempts failed)
-                        summary = Summary.objects.create(
-                            document=instance,
-                            text=summary_text,
-                            language=lang
-                        )
-                        
-                        # Generate explanation using ExplanationGenerator
-                        try:
-                            from core.explanation_generator import ExplanationGenerator
-                            explanation_generator = ExplanationGenerator()
-                            region_name = instance.region.name if instance.region else ""
-                            explanation = explanation_generator.generate_explanation(summary_text, region_name)
-                            
-                            # Update the summary with the explanation
-                            summary.explanation = explanation
-                            summary.save(update_fields=['explanation'])
-                            
-                        except Exception as e:
-                            logger.error(f"Error generating explanation for summary {summary.id}: {str(e)}")
-                            # The default explanation will be created by the Summary.save() method
-                            
-                        logger.info(f"Created {lang} summary for {instance.title}")
-                            
-                    except Exception as e:
-                        logger.error(f"Error creating {lang} summary for {instance.title}: {str(e)}")
-                        # Create a placeholder summary with error message
-                        Summary.objects.create(
-                            document=instance,
-                            text=f"Error generating summary: {str(e)}",
-                            language=lang
-                        )
-            
-            # Update the flag to indicate summarization has been attempted
-            instance.summarization_processed = True
-            instance.save(update_fields=['summarization_processed'])
-            
-        except Exception as e:
-            logger.error(f"Failed to generate summaries for document {instance.id}: {str(e)}")
+        # Import here to avoid circular imports
+        from core.tasks import process_document_summaries
+        
+        # Queue the task
+        process_document_summaries.delay(instance.id)
+        logger.info(f"Queued document {instance.id} for background processing")

@@ -190,10 +190,15 @@ class SummaryViewSet(viewsets.ViewSet):
             # Check if we have a stored explanation
             if hasattr(summary, 'explanation') and summary.explanation:
                 return summary.explanation
-            
+                
             # Generate explanation in English, with region context if available
             region_context = region_name or getattr(summary.document.region, 'name', '')
             explanation = self.explanation_generator.generate_explanation(summary.text, region_context)
+            
+            # Validate explanation to ensure it’s not the prompt or invalid
+            if not explanation or len(explanation) < 50 or "Be specific about both positive and negative impacts" in explanation:
+                logger.warning(f"Invalid explanation for summary {summary.id}: {explanation[:100]}...")
+                explanation = self.explanation_generator._get_fallback_explanation(region_context)
             
             # Store for future use if the model has the field
             if explanation and hasattr(summary, 'explanation'):
@@ -204,7 +209,7 @@ class SummaryViewSet(viewsets.ViewSet):
             
         except Exception as e:
             logger.error(f"Error generating explanation for summary {summary.id}: {str(e)}")
-            return f"Error generating explanation: {str(e)}"
+            return self.explanation_generator._get_fallback_explanation(region_context)
 
 
 class RegionViewSet(viewsets.ReadOnlyModelViewSet):

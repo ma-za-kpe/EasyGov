@@ -15,6 +15,48 @@ services:
         value: False
       - key: PYTHON_VERSION
         value: 3.8.10
+      - key: CELERY_BROKER_URL
+        fromService:
+          name: easygov-redis
+          type: redis
+          property: connectionString
+      - key: CELERY_RESULT_BACKEND
+        fromService:
+          name: easygov-redis
+          type: redis
+          property: connectionString
+
+  - type: worker
+    name: easygov-worker
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: celery -A app worker --loglevel=info
+    envVars:
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: False
+      - key: PYTHON_VERSION
+        value: 3.8.10
+      - key: CELERY_BROKER_URL
+        fromService:
+          name: easygov-redis
+          type: redis
+          property: connectionString
+      - key: CELERY_RESULT_BACKEND
+        fromService:
+          name: easygov-redis
+          type: redis
+          property: connectionString
+
+  # Redis service for Celery
+  - type: redis
+    name: easygov-redis
+    plan: free
+    ipAllowList:
+      - source: 0.0.0.0/0
+        description: everywhere
 databases:
   - name: dpg-d00nr6c9c44c73chnrp0-a
     databaseName: kusaidia_db
