@@ -4,7 +4,8 @@ import requests
 import time
 
 logger = logging.getLogger(__name__)
-
+ 
+ 
 class ExplanationGenerator:
     """
     Generates simplified explanations for government documents using the Hugging Face Inference API.
