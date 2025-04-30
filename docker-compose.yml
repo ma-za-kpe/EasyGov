@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   web:
     build: .
@@ -9,7 +11,11 @@ services:
     environment:
       - DJANGO_SECRET_KEY=your-secret-key
       - DEBUG=True
-      - DATABASE_URL=postgres://kusaidia_db_user:your-secure-password@db:5432/kusaidia_db
+      - POSTGRES_DB=${POSTGRES_DB:-kusaidia}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - SQL_HOST=db
+      - SQL_PORT=5432      
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
     depends_on:
@@ -26,7 +32,11 @@ services:
     environment:
       - DJANGO_SECRET_KEY=your-secret-key
       - DEBUG=True
-      - DATABASE_URL=postgres://kusaidia_db_user:your-secure-password@db:5432/kusaidia_db
+      - POSTGRES_DB=${POSTGRES_DB:-kusaidia}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - SQL_HOST=db
+      - SQL_PORT=5432 
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
     depends_on:
@@ -40,15 +50,15 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     environment:
-      - POSTGRES_DB=kusaidia_db
-      - POSTGRES_USER=kusaidia_db_user
-      - POSTGRES_PASSWORD=your-secure-password
+      - POSTGRES_DB=kusaidia
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
     ports:
       - "5432:5432"
     networks:
       - easygov-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U kusaidia_db_user"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/"]
       interval: 10s
       timeout: 5s
       retries: 5

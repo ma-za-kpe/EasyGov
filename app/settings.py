@@ -185,20 +185,18 @@ WSGI_APPLICATION = 'app.wsgi.application'
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
 if DATABASE_URL:
-    # If DATABASE_URL is available (Render provides this)
     DATABASES = {
         'default': dj_database_url.config(
             default=DATABASE_URL,
             conn_max_age=600,
-            ssl_require=True
+            ssl_require=not os.getenv('DEBUG', 'False').lower() == 'true'  # Disable SSL if DEBUG=True
         )
     }
 else:
-    # Only use this if DATABASE_URL is not available
     DATABASES = {
         'default': {
-            'ENGINE': 'django.db.backends.postgresql' if not DEBUG else 'django.db.backends.sqlite3',
-            'NAME': os.getenv('DB_NAME', 'easygov') if not DEBUG else os.path.join(BASE_DIR, 'db.sqlite3'),
+            'ENGINE': 'django.db.backends.postgresql' if not os.getenv('DEBUG', 'False').lower() == 'true' else 'django.db.backends.sqlite3',
+            'NAME': os.getenv('DB_NAME', 'easygov') if not os.getenv('DEBUG', 'False').lower() == 'true' else os.path.join(BASE_DIR, 'db.sqlite3'),
             'USER': os.getenv('DB_USER', ''),
             'PASSWORD': os.getenv('DB_PASSWORD', ''),
             'HOST': os.getenv('DB_HOST', ''),
@@ -241,8 +239,11 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
+# Static files (CSS, JavaScript, Images)
+STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]  # Optional: for custom static files
+STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
