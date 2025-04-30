@@ -14,6 +14,8 @@ from pathlib import Path
 import dj_database_url
 import os
 from dotenv import load_dotenv
+import sys
+
 
 # Load environment variables from .env
 load_dotenv()
@@ -95,18 +97,26 @@ CORS_ALLOW_HEADERS = [
     'x-requested-with',
 ]
 
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
     'handlers': {
         'console': {
+            'level': 'DEBUG',
             'class': 'logging.StreamHandler',
+            'stream': sys.stdout,
         },
     },
     'loggers': {
-        'corsheaders': {
+        'django': {
             'handlers': ['console'],
-            'level': 'DEBUG',
+            'level': os.getenv('DJANGO_LOG_LEVEL', 'DEBUG'),
+        },
+        'django.request': {
+            'handlers': ['console'],
+            'level': 'ERROR',
+            'propagate': True,
         },
     },
 }
