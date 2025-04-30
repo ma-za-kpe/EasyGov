@@ -1,83 +1,84 @@
-version: '3.8'
-
 services:
-  web:
-    build: .
-    command: gunicorn app.wsgi:application --bind 0.0.0.0:8000
-    volumes:
-      - .:/app
-    ports:
-      - "8000:8000"
-    environment:
-      - DJANGO_SECRET_KEY=your-secret-key
-      - DEBUG=True
-      - POSTGRES_DB=${POSTGRES_DB:-kusaidia}
-      - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
-      - SQL_HOST=db
-      - SQL_PORT=5432      
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
-    depends_on:
-      - db
-      - redis
-    networks:
-      - easygov-network
+  - type: web
+    name: easygov-backend
+    env: docker
+    plan: free
+    region: ohio
+    repo: https://github.com/ma-za-kpe/EasyGov
+    branch: main
+    dockerCommand: gunicorn app.wsgi:application --bind 0.0.0.0:8000
+    preDeployCommand: python manage.py migrate && python manage.py collectstatic --noinput
+    envVars:
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: False
+      - key: DATABASE_URL
+        fromDatabase:
+          name: kusaidia_db
+          property: connectionString
+      - key: CELERY_BROKER_URL
+        fromService:
+          name: easygov-redis
+          type: redis
+          property: connectionString
+      - key: CELERY_RESULT_BACKEND
+        fromService:
+          name: easygov-redis
+          type: redis
+          property: connectionString
+      - key: DJANGO_ALLOWED_HOSTS
+        value: "easygov.onrender.com"
+      - key: STATIC_ROOT
+        value: /app/staticfiles
+      - key: HF_TOKEN
+        sync: false # Add manually in Dashboard
+      - key: PYTHONUNBUFFERED
+        value: 1
 
-  worker:
-    build: .
-    command: celery -A app worker --loglevel=info
-    volumes:
-      - .:/app
-    environment:
-      - DJANGO_SECRET_KEY=your-secret-key
-      - DEBUG=True
-      - POSTGRES_DB=${POSTGRES_DB:-kusaidia}
-      - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
-      - SQL_HOST=db
-      - SQL_PORT=5432 
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
-    depends_on:
-      - db
-      - redis
-    networks:
-      - easygov-network
+  - type: worker
+    name: easygov-worker
+    env: docker
+    plan: free
+    region: ohio
+    repo: https://github.com/ma-za-kpe/EasyGov
+    branch: main
+    dockerCommand: celery -A app worker --loglevel=info
+    user: appuser
+    envVars:
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: False
+      - key: DATABASE_URL
+        fromDatabase:
+          name: kusaidia_db
+          property: connectionString
+      - key: CELERY_BROKER_URL
+        fromService:
+          name: easygov-redis
+          type: redis
+          property: connectionString
+      - key: CELERY_RESULT_BACKEND
+        fromService:
+          name: easygov-redis
+          type: redis
+          property: connectionString
+      - key: HF_TOKEN
+        sync: false # Add manually in Dashboard
+      - key: PYTHONUNBUFFERED
+        value: 1
 
-  db:
-    image: postgres:13
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    environment:
-      - POSTGRES_DB=kusaidia
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-    ports:
-      - "5432:5432"
-    networks:
-      - easygov-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health/"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+  - type: redis
+    name: easygov-redis
+    plan: free
+    region: Oregon (US West)
+    ipAllowList: [] # Internal connections only
+    maxmemoryPolicy: noeviction
 
-  redis:
-    image: redis:6
-    ports:
-      - "6379:6379"
-    networks:
-      - easygov-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-networks:
-  easygov-network:
-    driver: bridge
-
-volumes:
-  postgres_data:
+databases:
+  - name: kusaidia_db
+    databaseName: kusaidia_db
+    user: kusaidia_db_user
+    plan: free
+    region: Oregon (US West)
