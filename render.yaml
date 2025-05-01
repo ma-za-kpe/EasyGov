@@ -3,10 +3,10 @@ services:
     name: easygov-backend
     env: docker
     plan: free
-    region: oregon  # Set to Oregon (US West)
+    region: oregon
     repo: https://github.com/ma-za-kpe/EasyGov
     branch: main
-    dockerCommand: gunicorn app.wsgi:application --bind 0.0.0.0:8000
+    dockerCommand: gunicorn app.wsgi:application --bind 0.0.0.0:$PORT
     preDeployCommand: python manage.py migrate && python manage.py collectstatic --noinput
     envVars:
       - key: DJANGO_SECRET_KEY
@@ -35,12 +35,12 @@ services:
         sync: false
       - key: PYTHONUNBUFFERED
         value: 1
-
-  - type: pserv  # Private Service for background worker
+        
+  - type: pserv
     name: easygov-worker
     env: docker
-    plan: starter  # Reflect upgraded plan (1 GB RAM)
-    region: oregon  # Set to Oregon (US West)
+    plan: starter
+    region: oregon
     repo: https://github.com/ma-za-kpe/EasyGov
     branch: main
     dockerCommand: celery -A app worker --loglevel=info --concurrency=1 --uid=1000
@@ -72,7 +72,7 @@ services:
   - type: redis
     name: easygov-redis
     plan: free
-    region: oregon  # Set to Oregon (US West)
+    region: oregon
     ipAllowList: []
     maxmemoryPolicy: noeviction
 
@@ -81,4 +81,4 @@ databases:
     databaseName: kusaidia_db
     user: kusaidia_db_user
     plan: free
-    region: oregon  # Set to Oregon (US West)
+    region: oregon
