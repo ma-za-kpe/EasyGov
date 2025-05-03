@@ -36,13 +36,17 @@ class ExplanationGenerator:
             region_context = f" in {region_name}" if region_name else ""
             
             prompt = (
-                f"You are an expert at explaining complex government documents in very simple language. "
+                f"You are a friendly guide cheering women on about government plans in super simple words. "
                 f"Below is a summary of a government document{region_context}: \"{summary_text}\"\n\n"
-                f"In 100-150 words, explain clearly and simply how this document affects:\n"
-                f"1. Gender equality (e.g., women, girls, gender minorities)\n"
-                f"2. Reducing inequalities (e.g., poor communities, disabled people, rural areas)\n"
-                f"Use short sentences. Avoid technical words. Mention specific positive and negative impacts. "
-                f"Write for someone who reads at a basic level. Do not repeat the summary or this prompt."
+                f"In 100-150 words, explain in a warm, clear way how this helps women and girls (young, old, city, village, literate, or not). "
+                f"Answer:\n"
+                f"1. Why it matters (e.g., better health, jobs, or school).\n"
+                f"2. How it works (e.g., new programs, funding).\n"
+                f"3. When they can benefit (e.g., now, soon).\n"
+                f"4. Where to go (e.g., clinics, centers).\n"
+                f"Use short sentences. Sound excited. Give 2-3 easy actions women can take (e.g., visit a place, join a program, ask someone). "
+                f"Talk like a friend to someone who doesn’t read well. Skip big words or problems. "
+                f"Don’t repeat the summary or this prompt."
             )
             
             # Use Hugging Face Inference API if token is available
@@ -70,7 +74,7 @@ class ExplanationGenerator:
                     "inputs": prompt,
                     "parameters": {
                         "max_length": 250,  # Reduced to align with shorter explanation
-                        "min_length": 80,
+                        "min_length": 100,
                         "do_sample": False,
                         "temperature": 0.7,
                         "top_p": 0.9,

@@ -3,36 +3,18 @@ import re
 import tempfile
 import requests
 import pdfplumber
-from transformers import pipeline
-import gc
-import torch
+import os
 
+# Configure logging
+logging.basicConfig(level=logging.INFO, 
+                   format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 class Summarizer:
     def __init__(self):
-        logger.debug("Initializing Summarizer")
-        self.summarizer = None
-
-    def load_model(self):
-        if not self.summarizer:
-            logger.debug("Loading BART model")
-            self.summarizer = pipeline(
-                "summarization",
-                model="philschmid/bart-large-cnn-samsum",
-                device=-1,  # Force CPU
-                framework="pt",
-                torch_dtype=torch.float16  # Use half-precision to reduce memory
-            )
-            logger.info("Model loaded successfully")
-
-    def unload_model(self):
-        if self.summarizer:
-            logger.debug("Unloading model")
-            self.summarizer = None
-            torch.cuda.empty_cache() if torch.cuda.is_available() else None
-            gc.collect()
-            logger.info("Model unloaded")
+        logger.info("Initializing Summarizer with Hugging Face Inference API")
+        self.hf_api_key = os.getenv("HF_TOKEN", "")
+        self.summarizer_url = "https://api-inference.huggingface.co/models/facebook/bart-large-cnn"
 
     def extract_text_from_pdf(self, pdf_url):
         logger.debug(f"Extracting text from PDF: {pdf_url}")
@@ -44,14 +26,13 @@ class Summarizer:
                 temp_file_path = temp_file.name
             text = ''
             with pdfplumber.open(temp_file_path) as pdf:
-                for page in pdf.pages[:1]:  # Limit to 1 page
+                for page in pdf.pages:  # Scan all pages
                     page_text = page.extract_text()
                     if page_text:
                         text += page_text + '\n'
-            import os
             os.unlink(temp_file_path)
             logger.info(f"Extracted {len(text)} characters")
-            return text[:3000]  # Cap at 3,000 characters
+            return text[:10000]  # Cap at 10,000 characters
         except Exception as e:
             logger.error(f"Error extracting text: {str(e)}")
             return f"Error extracting text: {str(e)}"
@@ -60,7 +41,10 @@ class Summarizer:
         logger.debug(f"Extracting SDG-relevant text")
         keywords = [
             'gender', 'women', 'girls', 'female', 'maternal',
-            'gender-based violence', 'gender equality'
+            'gender-based violence', 'gender equality', 'gender parity',
+            'inequality', 'equity', 'disparity', 'marginalized', 'vulnerable',
+            'inclusion', 'inclusive', 'discrimination', 'minority',
+            'differently abled', 'disabilities', 'equal opportunity'
         ]
         relevant_text = ''
         for paragraph in text.split('\n'):
@@ -68,38 +52,33 @@ class Summarizer:
                 relevant_text += paragraph + '\n'
         if not relevant_text.strip():
             logger.warning("No SDG-relevant text found")
-            return text[:300]
+            return text[:4000]
         logger.info(f"Found {len(relevant_text)} characters of SDG-relevant text")
-        return relevant_text[:300]
+        return relevant_text[:4000]
 
-    def summarize_document(self, pdf_url, language='en'):
+    def summarize_document(self, pdf_url, language='en', region_name=''):
         logger.debug(f"Summarizing document: {pdf_url}")
         try:
-            self.load_model()
             text = self.extract_text_from_pdf(pdf_url)
             if "Error extracting text" in text:
-                return text, None
+                return text, None, None
             sdg_text = self._extract_sdg_relevant_text(text, language)
-            chunks = [sdg_text[i:i+300] for i in range(0, len(sdg_text), 300)]
-            summaries = []
-            for chunk in chunks[:1]:  # Process only first chunk
-                logger.info(f"Processing chunk of {len(chunk)} characters")
-                summary = self.summarizer(
-                    chunk,
-                    max_length=100,
-                    min_length=30,
-                    do_sample=False
-                )[0]['summary_text']
-                summaries.append(summary)
-            summary_text = ' '.join(summaries)
-            logger.info(f"Generated {len(summary_text)} character summary")
-            result = summary_text, sdg_text[:300]
-            self.unload_model()
-            return result
+            truncated_text = sdg_text[:4000]  # Cap at 4,000 characters
+            logger.info(f"Processing text of {len(truncated_text)} characters")
+            # Summarize using Hugging Face API
+            headers = {"Authorization": f"Bearer {self.hf_api_key}"}
+            payload = {
+                "inputs": truncated_text,
+                "parameters": {"max_length": 150, "min_length": 50}
+            }
+            response = requests.post(self.summarizer_url, headers=headers, json=payload)
+            response.raise_for_status()
+            summary = response.json()[0]["summary_text"]
+            logger.info(f"Generated {len(summary)} character summary")
+            return summary, sdg_text[:4000], None  # Explanation handled separately
         except Exception as e:
             logger.error(f"Error summarizing document: {str(e)}")
-            self.unload_model()
-            return f"Error summarizing document: {str(e)}", None
+            return f"Error summarizing document: {str(e)}", None, None
 
 
 
