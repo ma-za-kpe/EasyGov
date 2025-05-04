@@ -1,126 +1,95 @@
 import logging
 import os
-import requests
-import time
+from langchain_openai import ChatOpenAI
+from langchain_core.prompts import PromptTemplate
 
 logger = logging.getLogger(__name__)
- 
- 
+
 class ExplanationGenerator:
     """
-    Generates simplified explanations for government documents using the Hugging Face Inference API.
+    Generates simplified, actionable explanations for various government documents using OpenAI's API.
     """
     
     def __init__(self):
-        # Use a model suited for text generation/explanation
-        self.model_name = os.getenv("LLM_MODEL", "mistralai/Mixtral-8x7B-Instruct-v0.1")
-        self.hf_token = os.getenv("HF_TOKEN", "")  # Hugging Face token
-        
+        self.openai_api_key = os.getenv("OPENAI_API_KEY", "")
+        if not self.openai_api_key:
+            logger.error("OPENAI_API_KEY not set, explanations will use fallback")
+        self.llm = None
+        if self.openai_api_key:
+            try:
+                self.llm = ChatOpenAI(
+                    temperature=0.7,
+                    model_name="gpt-3.5-turbo",
+                    openai_api_key=self.openai_api_key
+                )
+                logger.info("Initialized OpenAI LLM for explanation generation")
+            except Exception as e:
+                logger.error(f"Failed to initialize OpenAI LLM: {str(e)}")
+    
     def generate_explanation(self, summary_text, region_name=""):
         """
-        Generate a simplified explanation in English focused on how the government document
-        impacts gender equality (SDG 5) and reduced inequalities (SDG 10).
+        Generate a simplified, actionable explanation in English focused on how a government
+        document impacts women, explaining specific laws, policies, and actions.
         """
-        # Check if text is empty, too short, or malformed
         if not summary_text or len(summary_text.strip()) < 10 or len(summary_text) > 1000:
             logger.warning(f"Invalid summary text for explanation: length={len(summary_text)}")
             return self._get_fallback_explanation(region_name)
             
         try:
-            # Clean summary text to prevent truncation or formatting issues
+            logger.debug(f"Original summary: {summary_text}")
             summary_text = summary_text.strip().replace('\n', ' ').replace('\r', '')
-            if len(summary_text) > 500:  # Truncate to avoid API limits
+            if len(summary_text) > 500:
                 summary_text = summary_text[:500] + "..."
+            logger.debug(f"Cleaned summary_text: {summary_text}")
                 
-            # Create a prompt that works for any region
             region_context = f" in {region_name}" if region_name else ""
             
-            prompt = (
-                f"You are a friendly guide cheering women on about government plans in super simple words. "
-                f"Below is a summary of a government document{region_context}: \"{summary_text}\"\n\n"
-                f"In 100-150 words, explain in a warm, clear way how this helps women and girls (young, old, city, village, literate, or not). "
-                f"Answer:\n"
-                f"1. Why it matters (e.g., better health, jobs, or school).\n"
-                f"2. How it works (e.g., new programs, funding).\n"
-                f"3. When they can benefit (e.g., now, soon).\n"
-                f"4. Where to go (e.g., clinics, centers).\n"
-                f"Use short sentences. Sound excited. Give 2-3 easy actions women can take (e.g., visit a place, join a program, ask someone). "
-                f"Talk like a friend to someone who doesn’t read well. Skip big words or problems. "
-                f"Don’t repeat the summary or this prompt."
+            prompt_template = PromptTemplate.from_template(
+                """
+                You are an experienced female community leader who has worked in women’s development for many years. You're known for explaining all kinds of government documents in clear, relatable terms to women of all backgrounds, helping them understand what’s happening and what they can do.
+
+                Please create a warm, conversational message (100-150 words) explaining a government document{region_context}: "{summary_text}"
+
+                Your message should:
+                - Sound like friendly advice from a caring, knowledgeable woman working in women’s development
+                - Use a warm, encouraging tone without lists or technical jargon
+                - Explain what the document is about, using details from the summary, and why it matters to women’s lives (e.g., better education, healthcare, jobs)
+                - Clarify any laws, policies, or terms mentioned in the summary (e.g., specific laws, programs, or initiatives) in simple language
+                - Describe what the government is doing (e.g., starting programs, allocating funds) based on the summary
+                - Say when women might see changes (e.g., soon, this year)
+                - Suggest 2-3 specific actions women can take to benefit from or engage with the document’s initiatives (e.g., contact a specific office, join a group, attend a meeting)
+                - Recommend where to get more information (e.g., relevant ministry, local government office)
+
+                Use short sentences and simple words for all literacy levels. Focus on practical steps and positive impacts, ensuring actions and explanations are directly tied to the document’s content.
+                """
             )
             
-            # Use Hugging Face Inference API if token is available
-            if self.hf_token:
-                return self._generate_with_hf_api(prompt)
-                
-            logger.warning("No Hugging Face token available, using fallback explanation")
+            if self.llm:
+                try:
+                    chain = prompt_template | self.llm
+                    explanation = chain.invoke({
+                        "summary_text": summary_text,
+                        "region_context": region_context
+                    }).content.strip()
+                    if explanation and len(explanation) > 50:
+                        logger.info(f"Generated explanation: {explanation[:100]}...")
+                        return explanation
+                    logger.warning("Generated explanation too short or invalid")
+                except Exception as e:
+                    logger.error(f"Error generating explanation with OpenAI: {str(e)}")
+            
+            logger.warning("OpenAI LLM unavailable or failed, using fallback explanation")
             return self._get_fallback_explanation(region_name)
             
         except Exception as e:
             logger.error(f"Error generating explanation: {str(e)}")
             return self._get_fallback_explanation(region_name)
     
-    def _generate_with_hf_api(self, prompt):
-        """Generate explanation using Hugging Face Inference API with retries"""
-        max_retries = 3
-        retry_delay = 2  # seconds
-        
-        for attempt in range(max_retries):
-            try:
-                api_url = f"https://api-inference.huggingface.co/models/{self.model_name}"
-                headers = {"Authorization": f"Bearer {self.hf_token}"}
-                
-                payload = {
-                    "inputs": prompt,
-                    "parameters": {
-                        "max_length": 250,  # Reduced to align with shorter explanation
-                        "min_length": 100,
-                        "do_sample": False,
-                        "temperature": 0.7,
-                        "top_p": 0.9,
-                        "return_full_text": False  # Avoid returning prompt
-                    }
-                }
-                
-                response = requests.post(api_url, headers=headers, json=payload, timeout=30)
-                
-                if response.status_code == 200:
-                    result = response.json()
-                    
-                    # Robust response handling
-                    if isinstance(result, list) and len(result) > 0 and isinstance(result[0], dict):
-                        if "generated_text" in result[0]:
-                            explanation = result[0]["generated_text"].strip()
-                            if explanation and len(explanation) > 50:
-                                return explanation
-                        elif "summary_text" in result[0]:
-                            explanation = result[0]["summary_text"].strip()
-                            if explanation and len(explanation) > 50:
-                                return explanation
-                    elif isinstance(result, dict) and "generated_text" in result:
-                        explanation = result["generated_text"].strip()
-                        if explanation and len(explanation) > 50:
-                            return explanation
-                            
-                    logger.warning(f"Invalid or empty API response: {result}")
-                
-                logger.warning(f"HF API error on attempt {attempt+1}: {response.status_code} - {response.text}")
-                
-            except Exception as e:
-                logger.error(f"Error with HF API on attempt {attempt+1}: {str(e)}")
-                
-            if attempt < max_retries - 1:
-                time.sleep(retry_delay)
-                
-        logger.error(f"All {max_retries} attempts to generate explanation with HF API failed")
-        return self._get_fallback_explanation()
-        
     def _get_fallback_explanation(self, region_name=""):
         """Return a fallback explanation when model generation fails"""
         region_text = f" in {region_name}" if region_name else ""
         return (
-            f"This government document{region_text} may support gender equality and reduce inequalities. "
-            f"It could help women and girls with better access to education, healthcare, or jobs. "
-            f"For marginalized groups, like people in rural areas or with disabilities, it might improve services or rights. "
-            f"But the impact depends on how the document is used and if it reaches those who need it most."
+            f"This government document{region_text} may help women and girls with opportunities like education, healthcare, or jobs. "
+            f"It focuses on fairness and supporting women. To learn more, visit your local government office or community center. "
+            f"You can ask about new programs, join a women’s group, or attend local meetings to get involved."
         )

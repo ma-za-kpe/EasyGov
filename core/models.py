@@ -9,7 +9,8 @@ logger = logging.getLogger(__name__)
 
 class Document(models.Model):
     title = models.CharField(max_length=255)
-    pdf_url = models.URLField(max_length=500)
+    pdf_file = models.FileField(upload_to='documents/%Y/%m/%d/', blank=True, null=True)  # Store uploaded PDFs
+    pdf_url = models.URLField(max_length=500, blank=True, default='')  # Optional URL
     source_url = models.URLField(max_length=500, blank=True, default='')
     is_verified = models.BooleanField(default=False)
     region = models.ForeignKey(Region, on_delete=models.CASCADE, related_name='documents')
@@ -118,6 +119,16 @@ def queue_document_processing(sender, instance, created, **kwargs):
             countdown=5
         )
         logger.info(f"Queued document {instance.id} for background processing with 5-second delay")
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
 
 # # core/models.py - Updated with Celery integration
 # from django.db import models

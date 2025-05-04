@@ -12,3 +12,11 @@ README.md
 temp.pdf
 .env
 docker-compose.yml
+
+
+.pytest_cache/
+*.log
+staticfiles/
+.git/
+.gitignore
+*.md

@@ -3,21 +3,25 @@ version: '3.8'
 services:
   web:
     build: .
-    command: gunicorn app.wsgi:application --bind 0.0.0.0:8000
+    command: ./start.sh
     volumes:
-      - .:/app
+      - ./:/app:cached
+      - /app/staticfiles
     ports:
       - "8000:8000"
     environment:
       - DJANGO_SECRET_KEY=your-secret-key
       - DEBUG=True
-      - POSTGRES_DB=${POSTGRES_DB:-kusaidia}
-      - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=kusaidia
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - DATABASE_URL=postgres://postgres:postgres@db:5432/kusaidia
       - SQL_HOST=db
       - SQL_PORT=5432      
+      - REDIS_URL=redis://redis:6379/0
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - HF_TOKEN=your-huggingface-token
     depends_on:
       - db
       - redis
@@ -26,22 +30,26 @@ services:
 
   worker:
     build: .
-    command: celery -A app worker --loglevel=info
+    command: celery -A app.celery worker --loglevel=info
     volumes:
-      - .:/app
+      - ./:/app:cached
     environment:
       - DJANGO_SECRET_KEY=your-secret-key
       - DEBUG=True
-      - POSTGRES_DB=${POSTGRES_DB:-kusaidia}
-      - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=kusaidia
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - DATABASE_URL=postgres://postgres:postgres@db:5432/kusaidia
       - SQL_HOST=db
       - SQL_PORT=5432 
+      - REDIS_URL=redis://redis:6379/0
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - HF_TOKEN=your-huggingface-token
     depends_on:
       - db
       - redis
+      - web
     networks:
       - easygov-network
 
@@ -58,7 +66,7 @@ services:
     networks:
       - easygov-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health/"]
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
